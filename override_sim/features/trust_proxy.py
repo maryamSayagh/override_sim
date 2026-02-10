@@ -31,12 +31,12 @@ def add_trust_proxies(df: pd.DataFrame, group_col: str = "user_id", outcome_lag:
         ai_correct = (out["ai_rec"] == out["y_true"]).astype(float)
         out["B_ai_acc_ewma"] = ai_correct.groupby(out[group_col]).transform(
             lambda s: ewma_shifted(s, alpha=0.05, shift=1 + outcome_lag)
-        ).fillna(0.5)
+        ).fillna(0.74)
         out["B_ai_err_rolling20"] = (1.0 - ai_correct).groupby(out[group_col]).transform(
             lambda s: s.shift(1 + outcome_lag).rolling(20, min_periods=1).mean()
-        ).fillna(0.5)
+        ).fillna(0.26)
     else:
-        out["B_ai_acc_ewma"] = 0.5
-        out["B_ai_err_rolling20"] = 0.5
+        out["B_ai_acc_ewma"] = 0.74
+        out["B_ai_err_rolling20"] = 0.26
 
     return out

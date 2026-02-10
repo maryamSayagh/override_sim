@@ -40,4 +40,4 @@ class SimConfig:
 
     # Override sampling (choice sharpness + target override rate)
     kappa: float = 6.0
-    target_override_rate: float = 0.35
+    target_override_rate: float = 0.25
