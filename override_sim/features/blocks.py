@@ -27,7 +27,15 @@ class FeatureBuilder:
         df["B_ai_uncertainty"] = 1.0 - np.abs(df["ai_prob"] - 0.5) * 2.0
         df["B_ai_margin"] = np.abs(df["ai_prob"] - 0.5)
         df["B_ai_rec"] = df["ai_rec"].astype(int)
-
+        # Process/explainability features (observable)
+        df["B_xai_present"] = df["xai_present"].astype(int)
+        df["B_xai_pre"] = (df["xai_timing"] == 1).astype(int) 
+        df["B_xai_post"] = (df["xai_timing"] == 2).astype(int)
+        df["B_xai_proc_score"] = df["xai_present"] * (
+        0.35 * df["xai_detail"] + 0.35 * df["xai_specificity"] + 0.30 * df["xai_consistency"]
+        )
+        df["B_xai_faithfulness"] = df["xai_faithfulness"]
+        df["B_purpose_align"] = df["purpose_align"]
         # -----------------------
         # Utility/Risk proxies (U)
         # -----------------------
@@ -37,14 +45,19 @@ class FeatureBuilder:
         # -----------------------
         # Incentive proxies (I)
         # -----------------------
-        df["I_audit"] = df["audit"].astype(int)
-        df["I_policy"] = df["policy_strict"]
-        df["I_audit_policy"] = df["audit"] * df["policy_strict"]
+        # ------------------ Incentive features (I- block) ------------------
+        audit  = df["audit"].fillna(0.0).astype(float)
+        policy = df["policy_strict"].fillna(0.0).astype(float)
 
-        # New incentive interactions (these were missing in your run)
-        df["I_audit_x_stake"] = df["audit"] * df["stake"]
-        df["I_audit_x_uncertainty"] = df["audit"] * df["B_ai_uncertainty"]
+        df["I_audit"]         = audit
+        df["I_policy"]        = policy
+        df["I_audit_policy"]  = audit * policy
 
+# Interactions used elsewhere
+        uncertainty = (0.5 - (df["ai_prob"].astype(float) - 0.5).abs())
+        df["I_audit_x_stake"]      = audit * df["stake"].astype(float)
+        df["I_audit_x_uncertainty"] = audit * uncertainty
+       
         # -----------------------
         # Cross-block interactions
         # -----------------------
@@ -75,7 +88,13 @@ class FeatureBuilder:
             "B_ovr_rolling10",
             "B_ai_acc_ewma",
             "B_ai_err_rolling20",
-
+            # B (explainability/process)
+            "B_xai_present",
+            "B_xai_pre",
+            "B_xai_post",
+            "B_xai_proc_score",
+            "B_xai_faithfulness",
+            "B_purpose_align",
             # U
             "U_stake",
             "U_risk_pressure",

@@ -1,16 +1,16 @@
-
 # experiments/run_phase2.py
 from __future__ import annotations
 
 import pandas as pd
 
 from override_sim.sim.generator import Simulator
-from override_sim.data.schema import OBSERVABLE_COLS
+from override_sim.data.schema import ALLOWED_FEATURE_COLS
 from override_sim.features.blocks import FeatureBuilder
 from override_sim.features.leakage import LeakageGuard
 from override_sim.models.baselines import LogisticOverrideModel
 from override_sim.eval.metrics import compute_metrics
-from override_sim.config.worlds import build_worlds
+from override_sim.config.schemas import SimConfig
+from override_sim.config.worlds import build_all_world_cfgs, get_world_description
 
 
 def time_split(df: pd.DataFrame, train_frac: float = 0.7, val_frac: float = 0.15):
@@ -22,6 +22,11 @@ def time_split(df: pd.DataFrame, train_frac: float = 0.7, val_frac: float = 0.15
 
 def build_Xy(df_obs: pd.DataFrame, fb: FeatureBuilder):
     X = fb.build(df_obs)
+
+    # Keep only columns explicitly allowed for prediction, if present
+    keep_cols = [c for c in X.columns if c in ALLOWED_FEATURE_COLS]
+    X = X[keep_cols].copy()
+
     y = df_obs["override"].astype(int).to_numpy()
     return X, y
 
@@ -62,17 +67,26 @@ def main():
     pd.set_option("display.max_columns", 50)
     pd.set_option("display.max_rows", 200)
 
-    worlds = build_worlds(target_override_rate=0.25)
+    base_cfg = SimConfig(target_override_rate=0.25)
+    worlds = build_all_world_cfgs(base_cfg)
     fb = FeatureBuilder()
 
     cache = {}
 
     print("\n=== Phase 2: Worlds ===")
-    for wname, (cfg, note) in worlds.items():
+    for wname, cfg in worlds.items():
+        note = get_world_description(wname)
+
         sim = Simulator(cfg)
         df = sim.run(return_latents=True)
 
-        df_obs = df[OBSERVABLE_COLS + ["override", "y_true"]].copy()
+        # Keep the columns needed to build features and labels
+        # ALLOWED_FEATURE_COLS should contain raw observable + derived allowed features,
+        # but FeatureBuilder is expected to construct derived features from observables.
+        # So here we keep the raw columns if present, plus override / y_true for feature building.
+        raw_cols = [c for c in df.columns if c in ALLOWED_FEATURE_COLS]
+        extra_cols = [c for c in ["override", "y_true"] if c in df.columns]
+        df_obs = df[raw_cols + extra_cols].copy()
 
         df_train, df_val, df_test = time_split(df_obs)
 
@@ -91,7 +105,6 @@ def main():
 
         cache[wname] = {
             "note": note,
-            "intercept_b": df.attrs.get("cfg.intercept_b"),
             "override_rate": float(df["override"].mean()),
             "X_train": X_train,
             "y_train": y_train,
@@ -103,7 +116,7 @@ def main():
 
         print(
             f"\n[{wname}] {note}\n"
-            f"  override_rate={cache[wname]['override_rate']:.3f}  intercept_b={cache[wname]['intercept_b']}\n"
+            f"  override_rate={cache[wname]['override_rate']:.3f}\n"
             f"  within-world TEST (All): {m_test}"
         )
         print("  ablations TEST (Logistic):")
