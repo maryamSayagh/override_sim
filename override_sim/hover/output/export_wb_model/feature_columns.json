@@ -1,0 +1,24 @@
+{
+  "feature_columns": [
+    "B_ovr_ewma",
+    "B_ai_prob_ewma",
+    "B_ovr_rolling10",
+    "B_ai_acc_ewma",
+    "B_ai_err_rolling20",
+    "B_xai_present",
+    "B_xai_pre",
+    "B_xai_post",
+    "B_xai_proc_score",
+    "B_xai_faithfulness",
+    "B_purpose_align",
+    "U_stake",
+    "U_risk_pressure",
+    "I_audit",
+    "I_policy",
+    "I_audit_policy",
+    "I_audit_x_stake",
+    "I_audit_x_uncertainty",
+    "BU_uncertainty_x_stake",
+    "BI_uncertainty_x_audit"
+  ]
+}

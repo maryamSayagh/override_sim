@@ -7,7 +7,7 @@ from override_sim.sim.generator import Simulator
 from override_sim.data.schema import ALLOWED_FEATURE_COLS
 from override_sim.features.blocks import FeatureBuilder
 from override_sim.features.leakage import LeakageGuard
-from override_sim.models.baselines import LogisticOverrideModel
+from override_sim.models.baselines import  GBDTOverrideModel
 from override_sim.eval.metrics import compute_metrics
 from override_sim.config.schemas import SimConfig
 from override_sim.config.worlds import build_all_world_cfgs, get_world_description
@@ -38,7 +38,7 @@ def align_columns(X_ref: pd.DataFrame, X_other: pd.DataFrame) -> pd.DataFrame:
 
 def run_ablations(X_train: pd.DataFrame, y_train, X_test: pd.DataFrame, y_test):
     """
-    Logistic ablations on TEST.
+    gradient ablations on TEST.
     Returns dict: block -> metrics dict.
     """
     feature_sets = {
@@ -54,7 +54,7 @@ def run_ablations(X_train: pd.DataFrame, y_train, X_test: pd.DataFrame, y_test):
             out[name] = {"roc_auc": float("nan"), "pr_auc": float("nan"), "brier": float("nan")}
             continue
 
-        lr = LogisticOverrideModel().fit(X_train[cols], y_train)
+        lr = GBDTOverrideModel().fit(X_train[cols], y_train)
         p = lr.predict_proba(X_test[cols])
         out[name] = compute_metrics(y_test, p)
 
@@ -78,7 +78,8 @@ def main():
         note = get_world_description(wname)
 
         sim = Simulator(cfg)
-        df = sim.run(return_latents=True)
+        df = sim.run(return_latents=True, hover_mode=False  )
+    
 
         # Keep the columns needed to build features and labels
         # ALLOWED_FEATURE_COLS should contain raw observable + derived allowed features,
@@ -97,7 +98,7 @@ def main():
         LeakageGuard().assert_no_forbidden_columns(X_train)
 
         # within-world baseline (All features)
-        model = LogisticOverrideModel().fit(X_train, y_train)
+        model = GBDTOverrideModel(max_depth=2, n_estimators=80, learning_rate=0.08).fit(X_train, y_train)
         m_test = compute_metrics(y_test, model.predict_proba(X_test))
 
         # ablations
@@ -119,7 +120,7 @@ def main():
             f"  override_rate={cache[wname]['override_rate']:.3f}\n"
             f"  within-world TEST (All): {m_test}"
         )
-        print("  ablations TEST (Logistic):")
+        print("  ablations TEST (Gradient boost):")
         for k in ["B_only", "U_only", "I_only", "All"]:
             print(f"    - {k}: {abl[k]}")
 
@@ -134,8 +135,8 @@ def main():
     for train_name in names:
         Xtr = cache[train_name]["X_train"]
         ytr = cache[train_name]["y_train"]
-        model = LogisticOverrideModel().fit(Xtr, ytr)
-
+        model = GBDTOverrideModel().fit(Xtr, ytr)
+       
         for test_name in names:
             Xte_raw = cache[test_name]["X_test"]
             yte = cache[test_name]["y_test"]

@@ -11,6 +11,8 @@ from typing import List
 import numpy as np
 import pandas as pd
 
+from override_sim.data.schema import ALLOWED_FEATURE_COLS , RAW_OBSERVABLE_COLS , TARGET_COL
+
 from ..config.schemas import SimConfig
 
 # ----- Signals & beliefs --------------------------------------------------
@@ -65,7 +67,7 @@ class Simulator:
     # ---------------------------------------------------------------
     # Main run
     # ---------------------------------------------------------------
-    def run(self, *, return_latents: bool = True) -> pd.DataFrame:
+    def run(self, *, return_latents: bool = True, hover_mode: bool = False) -> pd.DataFrame:
         cfg, rng = self.cfg, self.rng
         N = cfg.n_events
 
@@ -233,7 +235,10 @@ class Simulator:
                 "p_override_true": p_ovr,
             }
         )
-
+        if hover_mode:
+            hover_cols = [c for c in RAW_OBSERVABLE_COLS + [TARGET_COL] if c in df.columns]
+            df = df[hover_cols].copy()
+   
         if return_latents:
             df["human_prob_latent"]  = h_prob
             df["human_rec_latent"]   = h_rec

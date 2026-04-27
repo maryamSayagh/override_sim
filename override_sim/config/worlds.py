@@ -176,7 +176,49 @@ WORLD_SPECS: List[WorldSpec] = [
         },
     ),
 ]
+# ------------------------------------------------------------------
+# W_B_dominant  ─ belief/process dominates
+# ------------------------------------------------------------------
+WORLD_SPECS.append(
+    WorldSpec(
+        name="W_B_dominant",
+        description="Hyper-contrasted: belief/process weight 2 × higher; utility & incentives down-weighted.",
+        overrides={
+            # block weights
+            "w_B": 2.0,
+            "w_U": 0.3,
+            "w_I": 0.3,
+            # trust reacts faster & hurts more on errors
+            "rho_trust": 0.45,
+            "lambda_neg": 2.2,
+            # rich explainability
+            "xai_present_rate": 0.90,
+            "xai_pre_rate": 0.80,
+            # keep target_override_rate = 0.25
+        },
+    )
+)
 
+# ------------------------------------------------------------------
+# W_U_dominant  ─ utility dominates
+# ------------------------------------------------------------------
+WORLD_SPECS.append(
+    WorldSpec(
+        name="W_U_dominant",
+        description="Hyper-contrasted: utility / effort drives behaviour; belief & incentives muted.",
+        overrides={
+            "w_B": 0.3,
+            "w_U": 2.0,
+            "w_I": 0.3,
+            # make effort strong, stake salient
+            "effort_e1": 0.90,
+            "eta_risk": 1.1,
+            # scarce explanations
+            "xai_present_rate": 0.30,
+            # override rate still calibrated internally
+        },
+    )
+)
 
 def get_world_names() -> List[str]:
     return [w.name for w in WORLD_SPECS]
