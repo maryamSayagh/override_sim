@@ -1,15 +1,6 @@
-""" 
-initial method we'll use to check whether the dataset generated in fact follows the probabilities and assumptions we expect from input knowledge. 
-these expectation are basically what the generator used to create each row. 
-
-simulator generates: [features, [override , y_override_proba]]
-model: fit on [features, [override,y_override_proba]]
-       test and validate on [features], returns [features, y_proba]
-calibration: measures whether y_override_proba ~= y_proba
-
 
 """
-"""
+### I'll keep this description in this file just for now only, it's more general evaluation than just calibration 
 Initial method to evaluate whether the generated dataset
 preserves the probabilistic patterns and assumptions specified in the simulator.
 
@@ -22,7 +13,7 @@ Model:
     and y_proba is probability of override=0 or 1 for each row 
 
 Evaluation:
-    Probability recovery:
+    Probability recovery: (find in metrics.py)
         Compare y_proba with y_override_proba.
 
     Calibration:
@@ -30,11 +21,6 @@ Evaluation:
         measured by: 
             ECE: A number between 0 and 1; closer to 0 means better calibration.
             Reliability curve: A graph showing how closely predicted probabilities match observed frequencies.
-
-    Interpretation:
-        Good probability recovery suggests the intended
-        probabilistic relationships are learnable from
-        observable features.
 """
 
 
