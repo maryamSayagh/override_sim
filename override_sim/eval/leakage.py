@@ -81,79 +81,129 @@ def validate_features(X):
 def validate_split(
     train_df,
     test_df,
-    id_col=None,
+    id_row=("t", "user_id"),
     group_col="user_id",
     require_group_separation=True,
 ):
     """
-    Check instance and user overlap.
+    Validate training/testing separation.
 
-    Set id_col when a stable, globally unique instance
-    identifier is available.
+    Checks:
+        1. Required identifier columns exist.
+        2. Identifiers contain no null values.
+        3. (t, user_id) combinations are unique within each dataset.
+        4. No decision appears in both training and testing.
+        5. No users overlap when group separation is required.
 
-    Schema currently defines 't' and 'user_id',
-    but does not define 'instance_id'.
+    Set id_row=None for cross-world testing when
+    identifiers are only unique within each world/run.
     """
 
-    if id_col is not None:
+    # -------------------------------------------------------
+    # 1. Decision identifier validation
+    # -------------------------------------------------------
+
+    if id_row is not None:
+        id_cols = list(id_row)
+
         for name, df in (
             ("train", train_df),
             ("test", test_df),
         ):
-            if id_col not in df.columns:
+
+            # Check required columns
+            missing = set(id_cols) - set(df.columns)
+
+            if missing:
                 raise ValueError(
-                    f"{name}: missing ID column '{id_col}'. "
-                    "Fix: Check the generator's ID assignment "
-                    "and dataset export."
+                    f"{name}: missing ID columns {sorted(missing)}. "
+                    "Fix: Check generator.py and dataset export."
                 )
 
-            if df[id_col].isna().any():
+            # Check null identifiers
+            if df[id_cols].isna().any().any():
                 raise ValueError(
-                    f"{name}: null instance IDs detected. "
-                    "Fix: Inspect instance identifier generation."
+                    f"{name}: null decision identifiers detected. "
+                    "Fix: Check time-step and user ID generation "
+                    "in generator.py."
                 )
 
-        overlap = set(train_df[id_col]) & set(test_df[id_col])
+            # Check duplicate decisions
+            if df.duplicated(subset=id_cols).any():
+                raise ValueError(
+                    f"{name}: duplicate {tuple(id_cols)} "
+                    "combinations detected. "
+                    "Fix: Check generator.py to ensure each user "
+                    "has only one decision per time step."
+                )
+
+        # ---------------------------------------------------
+        # 2. Train/test decision overlap
+        # ---------------------------------------------------
+
+        train_ids = set(
+            train_df[id_cols].itertuples(
+                index=False,
+                name=None,
+            )
+        )
+
+        test_ids = set(
+            test_df[id_cols].itertuples(
+                index=False,
+                name=None,
+            )
+        )
+
+        overlap = train_ids & test_ids
 
         if overlap:
             raise ValueError(
-                f"Train/test instance overlap: {len(overlap)} IDs. "
-                "Fix: Check dataset splitting. Ensure IDs are "
-                "globally unique, especially across worlds."
+                f"Train/test decision overlap: "
+                f"{len(overlap)} matching identifiers. "
+                "Fix: Check dataset splitting in the experiment "
+                "runner. Ensure decisions are not reused "
+                "between training and testing."
             )
 
+    # -------------------------------------------------------
+    # 3. User-group separation
+    # -------------------------------------------------------
+
     if require_group_separation:
+
         for name, df in (
             ("train", train_df),
             ("test", test_df),
         ):
+
             if group_col not in df.columns:
                 raise ValueError(
                     f"{name}: missing group column '{group_col}'. "
-                    "Fix: Preserve user_id during dataset loading "
-                    "and use it for grouped splitting."
+                    "Fix: Check dataset loading and preserve "
+                    "user_id for grouped splitting."
                 )
 
             if df[group_col].isna().any():
                 raise ValueError(
                     f"{name}: null user IDs detected. "
-                    "Fix: Check user assignment in the simulator."
+                    "Fix: Check user assignment in generator.py."
                 )
 
-        overlap = (
-            set(train_df[group_col])
-            & set(test_df[group_col])
-        )
+        train_users = set(train_df[group_col])
+        test_users = set(test_df[group_col])
 
-        if overlap:
+        user_overlap = train_users & test_users
+
+        if user_overlap:
             raise ValueError(
-                f"Train/test user overlap: {len(overlap)} users. "
-                "Fix: Use GroupShuffleSplit grouped by user_id "
-                "in generalization.py."
+                f"Train/test user overlap: "
+                f"{len(user_overlap)} users. "
+                "Fix: Use GroupShuffleSplit with user_id "
+                "as the grouping variable in generalization.py."
             )
 
     return True
-
 
 # -------------------------------------------------------
 # 3. Historical feature checks
