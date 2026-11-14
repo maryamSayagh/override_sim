@@ -1,77 +1,74 @@
 
+
 """
  Leakage and Feature Access Validation
 
-Purpose:
-    Prevent hidden simulation information, target leakage,
-    and train/test contamination from invalidating
-    predictive evaluations.
+Checks:
+    - Feature access permissions
+    - Train/test instance and user overlap
+    - Historical feature availability
+    - Target validity
 
-Usage:
-    Run before training or evaluating a model.
-
-    Failed checks raise ValueError.
+Failed checks raise exceptions with suggested fixes.
 """
 
-import numpy as np
 import pandas as pd
 
-
-# -------------------------------------------------------
-# 1. Forbidden simulator information
-# -------------------------------------------------------
-
-FORBIDDEN_COLUMNS = {
-    "override",
-    "y_true",
-    "p_override_true",
-    "intercept_b",
-    "confusion_type",
-    "trust_T_latent",
-    "human_prob_latent",
-    "ai_correct",
-    "ai_error",
-    "y_final",
-}
-
-FORBIDDEN_PATTERNS = (
-    "_latent",
-    "_true",
+from data.data_schema import (
+    ALLOWED_FEATURE_COLS,
+    FORBIDDEN_COLS,
+    TARGET_COL,
 )
 
 
-def validate_features(X, target="override"):
-    """
-    Ensure model inputs contain no known forbidden
-    simulator variables or target labels.
-    """
+# -------------------------------------------------------
+# 1. Feature access validation
+# -------------------------------------------------------
+
+def validate_features(X):
+    """Ensure model inputs contain only allowed features."""
 
     if not isinstance(X, pd.DataFrame):
-        raise TypeError("X must be a pandas DataFrame.")
+        raise TypeError(
+            "X must be a pandas DataFrame. "
+            "Fix: Check feature construction in the experiment runner."
+        )
 
     if X.empty:
-        raise ValueError("Feature dataset is empty.")
-
-    forbidden = set(FORBIDDEN_COLUMNS) | {target}
-
-    leaked = [
-        col for col in X.columns
-        if col in forbidden
-        or col.endswith(FORBIDDEN_PATTERNS)
-    ]
-
-    if leaked:
         raise ValueError(
-            f"Feature leakage detected: {leaked}"
+            "Feature dataset is empty. "
+            "Fix: Check dataset loading, filtering, and feature selection."
         )
 
     if not X.columns.is_unique:
-        raise ValueError("Duplicate feature names detected.")
+        raise ValueError(
+            "Duplicate feature names detected. "
+            "Fix: Check dataset merges and feature construction."
+        )
+
+    selected = set(X.columns)
+    forbidden = selected & set(FORBIDDEN_COLS + [TARGET_COL])
+    unknown = selected - set(ALLOWED_FEATURE_COLS)
+
+    if forbidden:
+        raise ValueError(
+            f"Forbidden features detected: {sorted(forbidden)}. "
+            "Fix: Remove them from the training feature list. "
+            "Check data/data_schema.py and the dataset masking step."
+        )
+
+    if unknown:
+        raise ValueError(
+            f"Unregistered features detected: {sorted(unknown)}. "
+            "Fix: Review these columns and register legitimate "
+            "observable features in data/data_schema.py."
+        )
 
     if X.isna().any().any():
         raise ValueError(
-            "Missing values detected. "
-            "Use training-fitted preprocessing if needed."
+            "Missing feature values detected. "
+            "Fix: Check data preparation and trust_proxy.py. "
+            "Fit imputation only on the training partition."
         )
 
     return True
@@ -84,55 +81,75 @@ def validate_features(X, target="override"):
 def validate_split(
     train_df,
     test_df,
-    id_col="instance_id",
+    id_col=None,
     group_col="user_id",
     require_group_separation=True,
 ):
     """
-    Detect overlapping instances and, optionally,
-    overlapping users between training and testing.
+    Check instance and user overlap.
 
-    For cross-world experiments, instance IDs must be
-    globally unique before enabling ID-overlap checking.
+    Set id_col when a stable, globally unique instance
+    identifier is available.
+
+    Schema currently defines 't' and 'user_id',
+    but does not define 'instance_id'.
     """
 
     if id_col is not None:
-        for df in (train_df, test_df):
+        for name, df in (
+            ("train", train_df),
+            ("test", test_df),
+        ):
             if id_col not in df.columns:
                 raise ValueError(
-                    f"Missing required ID column: {id_col}"
+                    f"{name}: missing ID column '{id_col}'. "
+                    "Fix: Check the generator's ID assignment "
+                    "and dataset export."
                 )
 
             if df[id_col].isna().any():
-                raise ValueError("Null instance IDs detected.")
+                raise ValueError(
+                    f"{name}: null instance IDs detected. "
+                    "Fix: Inspect instance identifier generation."
+                )
 
-        train_ids = set(train_df[id_col])
-        test_ids = set(test_df[id_col])
-
-        overlap = train_ids & test_ids
+        overlap = set(train_df[id_col]) & set(test_df[id_col])
 
         if overlap:
             raise ValueError(
-                f"Train/test instance overlap: "
-                f"{len(overlap)} IDs."
+                f"Train/test instance overlap: {len(overlap)} IDs. "
+                "Fix: Check dataset splitting. Ensure IDs are "
+                "globally unique, especially across worlds."
             )
 
     if require_group_separation:
-        for df in (train_df, test_df):
+        for name, df in (
+            ("train", train_df),
+            ("test", test_df),
+        ):
             if group_col not in df.columns:
                 raise ValueError(
-                    f"Missing group column: {group_col}"
+                    f"{name}: missing group column '{group_col}'. "
+                    "Fix: Preserve user_id during dataset loading "
+                    "and use it for grouped splitting."
                 )
 
-        train_users = set(train_df[group_col].dropna())
-        test_users = set(test_df[group_col].dropna())
+            if df[group_col].isna().any():
+                raise ValueError(
+                    f"{name}: null user IDs detected. "
+                    "Fix: Check user assignment in the simulator."
+                )
 
-        overlap = train_users & test_users
+        overlap = (
+            set(train_df[group_col])
+            & set(test_df[group_col])
+        )
 
         if overlap:
             raise ValueError(
-                f"Train/test user overlap: "
-                f"{len(overlap)} users."
+                f"Train/test user overlap: {len(overlap)} users. "
+                "Fix: Use GroupShuffleSplit grouped by user_id "
+                "in generalization.py."
             )
 
     return True
@@ -142,56 +159,49 @@ def validate_split(
 # 3. Historical feature checks
 # -------------------------------------------------------
 
-HISTORY_FEATURES = {
-    "B_ovr_ewma",
-    "B_ovr_rolling10",
-    "B_ai_prob_ewma",
-    "B_ai_acc_ewma",
-    "B_ai_err_rolling20",
-    "B_xai_proc_score_ewma",
-    "B_purpose_align_ewma",
-}
-
-
 def validate_history_metadata(
     features,
     history_shifted,
     outcomes_available,
 ):
     """
-    Verify declared provenance of historical features.
+    Validate declared historical feature availability.
 
-    history_shifted:
-        True if all history features exclude the
-        current decision and future observations.
+    Uses the registered allowed features rather than
+    maintaining a separate feature registry.
 
-    outcomes_available:
-        True if historical outcome-derived values
-        were available at prediction time.
-
-    This validates metadata, NOT feature construction.
+    This is a metadata check, not a timestamp audit.
     """
 
-    selected = set(features) & HISTORY_FEATURES
+    history_features = {
+        col for col in ALLOWED_FEATURE_COLS
+        if col.endswith(("_ewma", "_rolling10", "_rolling20"))
+    }
+
+    selected = set(features) & history_features
 
     if not selected:
         return True
 
     if not history_shifted:
         raise ValueError(
-            "Historical features must exclude "
-            "current and future observations."
+            f"Historical features not verified: {sorted(selected)}. "
+            "Fix: Check trust_proxy.py. Sort observations by user "
+            "and chronological order before calculating shifted "
+            "EWMA or rolling features."
         )
 
-    outcome_features = selected & {
-        "B_ai_acc_ewma",
-        "B_ai_err_rolling20",
+    outcome_features = {
+        col for col in selected
+        if col.startswith(("B_ai_acc_", "B_ai_err_"))
     }
 
     if outcome_features and not outcomes_available:
         raise ValueError(
-            "Historical AI correctness features require "
-            "past outcomes available at prediction time."
+            f"Outcome availability not verified: "
+            f"{sorted(outcome_features)}. "
+            "Fix: Check trust_proxy.py, outcome_lag, and "
+            "when correctness outcomes become observable."
         )
 
     return True
@@ -205,19 +215,38 @@ def validate_evaluation(
     train_df,
     test_df,
     features,
-    target="override",
-    id_col="instance_id",
+    target=TARGET_COL,
+    id_col=None,
     group_col="user_id",
     require_group_separation=True,
     history_shifted=False,
     outcomes_available=False,
 ):
     """
-    Run leakage checks before an evaluation.
+    Validate training and testing data before evaluation.
 
-    Only returns sanitized X/y references after
-    all applicable checks pass.
+    Returns:
+        X_train, X_test, y_train, y_test
     """
+
+    if target != TARGET_COL:
+        raise ValueError(
+            f"Unexpected target '{target}'. "
+            f"Expected '{TARGET_COL}'. "
+            "Fix: Check TARGET_COL in data/data_schema.py."
+        )
+
+    if not features:
+        raise ValueError(
+            "No input features selected. "
+            "Fix: Check feature selection in the experiment runner."
+        )
+
+    if len(features) != len(set(features)):
+        raise ValueError(
+            "Duplicate selected features. "
+            "Fix: Remove repeated columns from the feature list."
+        )
 
     required = set(features) | {target}
 
@@ -229,14 +258,16 @@ def validate_evaluation(
 
         if missing:
             raise ValueError(
-                f"{name}: missing columns {sorted(missing)}"
+                f"{name}: missing columns {sorted(missing)}. "
+                "Fix: Check dataset loading, feature engineering, "
+                "and data/data_schema.py."
             )
 
     X_train = train_df.loc[:, features].copy()
     X_test = test_df.loc[:, features].copy()
 
-    validate_features(X_train, target)
-    validate_features(X_test, target)
+    validate_features(X_train)
+    validate_features(X_test)
 
     validate_split(
         train_df,
@@ -256,14 +287,23 @@ def validate_evaluation(
     y_test = test_df[target].copy()
 
     if not y_train.isin([0, 1]).all():
-        raise ValueError("Invalid training target values.")
+        raise ValueError(
+            "Invalid training target values. "
+            "Fix: Check binary override generation in the "
+            "simulator and dataset preprocessing."
+        )
 
     if not y_test.isin([0, 1]).all():
-        raise ValueError("Invalid testing target values.")
+        raise ValueError(
+            "Invalid testing target values. "
+            "Fix: Check the test dataset's override column."
+        )
 
     if y_train.nunique() < 2:
         raise ValueError(
-            "Training dataset requires both override classes."
+            "Training dataset contains only one override class. "
+            "Fix: Inspect override distribution and the "
+            "train/test splitting procedure."
         )
 
     return X_train, X_test, y_train, y_test
