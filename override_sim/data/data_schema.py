@@ -63,6 +63,10 @@ DERIVED_ALLOWED_COLS = [
     # cross-block interactions
     "BU_uncertainty_x_stake",
     "BI_uncertainty_x_audit",
+
+
+    "B_xai_proc_score_ewma",
+    "B_purpose_align_ewma",
 ]
 
 # ============================================================
@@ -79,35 +83,49 @@ DERIVED_FORBIDDEN_COLS = [
 # 4) LATENT / INTERNAL VARIABLES
 # Behavioral variables used by the generator only
 # ============================================================
+
 LATENT_COLS = [
     "human_prob_latent",
     "human_rec_latent",
     "trust_T_latent",
     "delta_latent",
     "proc_score_latent",
+    "utility_term_latent",
+    "incentive_term_latent",
+    "belief_term_latent",
 ]
-
 # ============================================================
 # 5) POST-OUTCOME / FUTURE-ONLY VARIABLES
 # Not available at recommendation time
 # ============================================================
 POST_OUTCOME_COLS = [
     "y_true",
+    "y_final",
+    "effective_override",
 ]
 
 # ============================================================
 # 6) FINAL REGISTRIES
 # ============================================================
-ALLOWED_FEATURE_COLS = RAW_OBSERVABLE_COLS + DERIVED_ALLOWED_COLS
 
-FORBIDDEN_COLS = DERIVED_FORBIDDEN_COLS + LATENT_COLS + POST_OUTCOME_COLS
+TARGET_COL = "override"
 
-ALL_KNOWN_COLS = (
+ALLOWED_FEATURE_COLS = (
     RAW_OBSERVABLE_COLS
     + DERIVED_ALLOWED_COLS
-    + DERIVED_FORBIDDEN_COLS
+)
+
+FORBIDDEN_COLS = (
+    DERIVED_FORBIDDEN_COLS
     + LATENT_COLS
     + POST_OUTCOME_COLS
 )
 
-TARGET_COL = "override"
+ALL_KNOWN_COLS = (
+    ALLOWED_FEATURE_COLS
+    + FORBIDDEN_COLS
+    + [TARGET_COL]
+)
+
+
+
