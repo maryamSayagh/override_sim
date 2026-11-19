@@ -240,6 +240,13 @@ class Simulator:
 
         h_rec = rec_from_prob(h_prob, 0.5)
 
+
+       print("AI accuracy:", np.mean(ai_rec == y_true))
+       print("Human accuracy:", np.mean(h_rec == y_true))
+       print("Disagreement:", np.mean(ai_rec != h_rec))
+       print("Both correct:", np.mean((ai_rec == y_true) & (h_rec == y_true)))
+       print("Both wrong:", np.mean((ai_rec != y_true) & (h_rec != y_true)))
+  
         # ------------------------------------------------
         # 3. Explainability
         # ------------------------------------------------
