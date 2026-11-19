@@ -112,8 +112,8 @@ class SimConfig:
     seed: int = 42
 
     # AI / Human signal strength (higher => more accurate)
-    mu_ai: float = 2.0
-    mu_h: float = 1.3
+    mu_ai: float = 1
+    mu_h: float = 0.7
 
     # Confirmation bias parameters (agreement overweight, disagreement underweight)
     lambda_pos: float = 1.3
